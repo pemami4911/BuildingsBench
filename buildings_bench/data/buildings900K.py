@@ -185,7 +185,7 @@ class Buildings900K(torch.utils.data.Dataset):
         assert datetime.datetime.strptime(weather_df['date_time'].iloc[0], '%Y-%m-%d %H:%M:%S').strftime('%m-%d') == '01-01',\
             "The weather file does not start from Jan 1st"
 
-        weather_df = weather_df.iloc[seq_ptr-self.context_len -1 : seq_ptr+self.pred_len -1] # add -1 because the file starts from 01:00:00
+        weather_df = weather_df.iloc[seq_ptr-self.context_len: seq_ptr+self.pred_len] # add -1 because the file starts from 01:00:00
 
         weather_df.columns = ['timestamp', 'temperature', 'humidity', 'wind_speed', 'wind_direction', 'global_horizontal_radiation', 
                               'direct_normal_radiation', 'diffuse_horizontal_radiation']
@@ -198,18 +198,6 @@ class Buildings900K(torch.utils.data.Dataset):
         for col in weather_df.columns[1:]:
             weather_transform.load(self.metadata_path / 'transforms/weather-900K/' / col)
             sample.update({col : weather_transform.transform(weather_df[col].to_numpy())[0][...,None]})
-
-        # weather_data = weather_transform.transform(weather_df.iloc[:, 1:].to_numpy())
-
-        # sample.update({
-        #     'temperature': weather_df.iloc[:, 1].to_numpy()[...,None],
-        #     'humidity': weather_df.iloc[:, 2].to_numpy()[...,None],
-        #     'wind_speed': weather_df.iloc[:, 3].to_numpy()[...,None], 
-        #     'wind_direction': weather_df.iloc[:, 4].to_numpy()[...,None], 
-        #     'global_horizontal_radiation': weather_df.iloc[:, 5].to_numpy()[...,None], 
-        #     'direct_normal_radiation': weather_df.iloc[:, 6].to_numpy()[...,None], 
-        #     'diffuse_horizontal_radiation' : weather_df.iloc[:, 7].to_numpy()[...,None]
-        # })
 
         return sample
     

@@ -199,12 +199,12 @@ def main(args, model_args):
     train_dataset = load_pretraining('buildings-900k-train',
                                      args.num_buildings,
                                      args.apply_scaler_transform,
-                                     transform_path)
+                                     transform_path, weather=True)
     
     val_dataset = load_pretraining('buildings-900k-val',
                                    args.num_buildings,
                                    args.apply_scaler_transform,
-                                   transform_path)
+                                   transform_path, weather=True)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(
                                      dataset=train_dataset,
