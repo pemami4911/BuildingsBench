@@ -96,6 +96,12 @@ class BaseSurrogateModel(nn.Module, metaclass=abc.ABCMeta):
         self.continuous_loads = continuous_loads
 
     @abc.abstractmethod
+    def init_param(self):
+        '''Initialize model parameters
+        '''
+        raise NotImplementedError()
+    
+    @abc.abstractmethod
     def forward(self, x: Dict) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward pass. 
         

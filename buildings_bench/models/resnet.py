@@ -64,6 +64,7 @@ class ResNet(BaseSurrogateModel):
             blocks.append(block)
 
         self.blocks = nn.Sequential(*blocks)
+        self.init_param()
 
     def forward(self, x):
         r"""Forward pass of the deep autoregressive model. 
@@ -110,6 +111,13 @@ class ResNet(BaseSurrogateModel):
         elif self.continuous_head == 'gaussian_nll':
             return F.gaussian_nll_loss(x[:, :, 0].unsqueeze(2), y,
                                        F.softplus(x[:, :, 1].unsqueeze(2)) **2)
+        
+    def init_param(self):
+        def helper(module):
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight, gain=nn.init.calculate_gain('relu'))
+                module.bias.data.fill_(0.)
+        self.apply(helper)
 
     def unfreeze_and_get_parameters_for_finetuning(self):
         for p in self.parameters():
@@ -117,4 +125,13 @@ class ResNet(BaseSurrogateModel):
         return self.parameters()
 
     def load_from_checkpoint(self, checkpoint_path):
-        return None
+        stored_ckpt = torch.load(checkpoint_path)
+        model_state_dict = stored_ckpt['model']
+        new_state_dict = {}
+        for k,v in model_state_dict.items():
+            # remove string 'module.' from the key
+            if 'module.' in k:
+                new_state_dict[k.replace('module.', '')] = v
+            else:
+                new_state_dict[k] = v
+        self.load_state_dict(new_state_dict) 

@@ -80,7 +80,6 @@ class Buildings900K(torch.utils.data.Dataset):
         if surrogate_mode:
             assert self.context_len == 0
             self.total_hours = int((pd.Timestamp('2018-12-31') - pd.Timestamp('2018-01-01')).total_seconds() / 3600)
-            np.random.seed(0)
 
         if self.apply_scaler_transform == 'boxcox':
             self.load_transform = BoxCoxTransform()
