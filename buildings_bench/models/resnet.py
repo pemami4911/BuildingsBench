@@ -48,9 +48,6 @@ class ResNet(BaseSurrogateModel):
         out_dim = 1 if self.continuous_head == 'mse' else 2
         self.logits = nn.Linear(hidden_dims[-1], out_dim)
         
-        self.building_embedding = nn.Embedding(2, 32)
-        self.lat_embedding = nn.Linear(1, 32)
-        self.lon_embedding = nn.Linear(1, 32)
         self.day_of_year_encoding = TimeSeriesSinusoidalPeriodicEmbedding(32) 
         self.day_of_week_encoding = TimeSeriesSinusoidalPeriodicEmbedding(32)
         self.hour_of_day_encoding = TimeSeriesSinusoidalPeriodicEmbedding(32)
@@ -80,9 +77,6 @@ class ResNet(BaseSurrogateModel):
         # [batch_size, seq_len, 256]
 
         time_series_embed = torch.cat([
-            self.lat_embedding(x['latitude']),
-            self.lon_embedding(x['longitude']),
-            self.building_embedding(x['building_type']).squeeze(2),
             self.day_of_year_encoding(x['day_of_year']),
             self.day_of_week_encoding(x['day_of_week']),
             self.hour_of_day_encoding(x['hour_of_day']),
