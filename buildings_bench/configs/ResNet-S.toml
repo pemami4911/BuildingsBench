@@ -1,0 +1,9 @@
+[model]
+pred_len = 1
+hidden_dims = [909, 512, 256]
+continuous_head = 'mse'
+continuous_loads = true
+
+[pretrain]
+init_scale = 0.02
+apply_scaler_transform = 'boxcox'
