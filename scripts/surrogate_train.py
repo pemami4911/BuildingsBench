@@ -17,11 +17,7 @@ from buildings_bench.models import model_factory
 from buildings_bench.evaluation.metrics import MetricType
 from buildings_bench.evaluation import metrics_factory
 from buildings_bench.evaluation import scoring_rule_factory
-from buildings_bench.data import load_torch_dataset
 from buildings_bench.data import g_weather_features
-import numpy as np
-import math
-import pickle
 
 SCRIPT_PATH = Path(os.path.realpath(__file__)).parent
 
@@ -70,12 +66,12 @@ def validation(model, val_dataloader, args, loss, load_transform, transform, inv
             continuous_targets = inverse_transform(continuous_targets)
             # unscale for crps
             targets = inverse_transform(targets)
-            if args.apply_scaler_transform == 'standard':
+            if args.apply_scaler_transform == 'standard' and distribution_params is not None:
                 mu = inverse_transform(distribution_params[:,:,0])
                 sigma = load_transform.undo_transform_std(distribution_params[:,:,1])
                 distribution_params = torch.cat([mu.unsqueeze(-1), sigma.unsqueeze(-1)],-1)
             
-            elif args.apply_scaler_transform == 'boxcox':
+            elif args.apply_scaler_transform == 'boxcox' and distribution_params is not None:
                 ######## approximate Gaussian in unscaled space ########
                 mu = inverse_transform(distribution_params[:,:,0])
                 muplussigma = inverse_transform(torch.sum(distribution_params,-1))
@@ -289,9 +285,9 @@ def main(args, model_args):
     else:
         step = 0
         seen_tokens = 0
-        for p in model.parameters():
-            if p.dim() > 1:
-                nn.init.normal_(p, mean=0.0, std=args.init_scale)
+        # for p in model.parameters():
+        #     if p.dim() > 1:
+        #         nn.init.normal_(p, mean=0.0, std=args.init_scale)
 
     #################### Training loop ##############################
     best_val_loss = 1e9
