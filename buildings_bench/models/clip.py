@@ -11,16 +11,20 @@ class CLIPModel(nn.Module):
     def __init__(
         self,
         temperature = 1.0,
-        physics_embedding = 768,
+        physics_embedding = 128,
         text_embedding = 768,
         model_name = "distilbert-base-uncased",
         pretrained = True,
         trainable = True, 
         max_length = 200,
-        projection_dim = 256
+        projection_dim = 128
     ):
         super().__init__()
-        self.physics_encoder = PhysicsEncoder()
+        self.physics_encoder = PhysicsEncoder(
+            hidden_size = physics_embedding, 
+            lstm_layers = 3, 
+            context_len = 168,
+            trainable = True)
         self.text_encoder = TextEncoder(
             model_name = model_name, 
             pretrained = pretrained, 
@@ -31,16 +35,23 @@ class CLIPModel(nn.Module):
         self.text_projection = ProjectionHead(embedding_dim=text_embedding, projection_dim = projection_dim)
         self.temperature = temperature
 
-    def forward(self, batch):
+    def forward(self, x):
 
         caption = "" # Get text for the batch using building ids
         # Getting Physics-based and Text Features
-        physics_features = self.physics_encoder(batch)
+        physics_features = self.physics_encoder(x)
         text_features = self.text_encoder(captions)
         # Getting Physics-based and Text Embeddings (with same dimension)
         physics_embeddings = self.physics_projection(physics_features)
         text_embeddings = self.text_projection(text_features)
 
+        return text_embeddings, physics_embeddings
+
+    def predict(self, x: Dict) -> Tuple[torch.Tensor, torch.Tensor]:
+        out = self.forward(x)
+        return out, None
+    
+    def loss(self, text_embeddings, physics_embeddings):
         # Calculating the Loss
         logits = (text_embeddings @ physics_embeddings.T) / self.temperature
         physicss_similarity = physics_embeddings @ physics_embeddings.T

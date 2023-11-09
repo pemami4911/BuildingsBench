@@ -8,7 +8,36 @@ class PhysicsEncoder(nn.Module):
     """
     Encode physics input to a fixed size vector
     """
-    pass
+    def __init__(
+        self, 
+        hidden_size = 128, 
+        lstm_layers = 3, 
+        context_len = 168,
+        trainable = True,
+    ):
+        super().__init__()
+
+        self.context_len = context_len
+        self.hidden_size = hidden_size
+        self.encoder = nn.LSTM(1, hidden_size, num_layers=lstm_layers, batch_first=True)
+
+        for p in self.model.parameters():
+            p.requires_grad = trainable
+
+    def forward(self, x):
+
+        load_ts = x['load']
+        x = load_ts[:, :self.context_len, :]
+
+        h_0 = Variable(torch.zeros(
+            self.num_layers, x.size(0), self.hidden_size))
+        c_0 = Variable(torch.zeros(
+            self.num_layers, x.size(0), self.hidden_size))
+
+	    _, (h_out, _) = self.lstm(x, (h_0, c_0))
+        h_out = h_out[-1]
+
+        return h_out
 
 class TextEncoder(nn.Module):
     """
@@ -32,6 +61,7 @@ class TextEncoder(nn.Module):
             p.requires_grad = trainable
 
         self.tokenizer = DistilBertTokenizer.from_pretrained(model_name)
+
         # we are using the CLS token hidden representation as the sentence's embedding
         self.target_token_idx = 0
 
