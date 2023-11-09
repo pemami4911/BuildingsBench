@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-
+from pathlib import Path
+import os
 from clip_modules import PhysicsEncoder, TextEncoder, ProjectionHead
 
 '''
@@ -34,10 +35,17 @@ class CLIPModel(nn.Module):
         self.physics_projection = ProjectionHead(embedding_dim=physics_embedding, projection_dim = projection_dim)
         self.text_projection = ProjectionHead(embedding_dim=text_embedding, projection_dim = projection_dim)
         self.temperature = temperature
+        self.metadata = Path(os.environ.get('BUILDINGS_BENCH', '')) / "metadata_dev"
+        self.datasets = ["comstock_tmy3", "resstock_tmy3", "comstock_amy2018", "resstock_amy2018"]
 
     def forward(self, x):
+        captions = [] 
+        for dataset_id, bldg_id in zip(x["dataset_id"], x["building_id"]):
+            dataset_id = int(dataset_id.item())
+            bldg_id = int(bldg_id.item())
+            with open(self.metadata / "simcap" / {self.datasets[dataset_id]} / f"{bldg_id}_cap.txt", "r") as f:
+                captions.append(f.read())
 
-        caption = "" # Get text for the batch using building ids
         # Getting Physics-based and Text Features
         physics_features = self.physics_encoder(x)
         text_features = self.text_encoder(captions)

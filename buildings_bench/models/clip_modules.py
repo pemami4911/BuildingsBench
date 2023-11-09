@@ -34,7 +34,7 @@ class PhysicsEncoder(nn.Module):
         c_0 = Variable(torch.zeros(
             self.num_layers, x.size(0), self.hidden_size))
 
-	    _, (h_out, _) = self.lstm(x, (h_0, c_0))
+        _, (h_out, _) = self.lstm(x, (h_0, c_0))
         h_out = h_out[-1]
 
         return h_out
