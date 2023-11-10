@@ -1,0 +1,10 @@
+[model]
+physics_embedding = 512
+text_encoder_name = "distilbert-base-uncased"
+text_embedding = 768
+max_length = 200
+pretrained = true
+trainable = true
+temperature = 1.0
+projection_dim = 128
+continuous_loads = true

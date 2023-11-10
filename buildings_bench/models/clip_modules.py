@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-import timm
 from transformers import DistilBertModel, DistilBertConfig,  DistilBertTokenizer
 
 
@@ -11,33 +10,34 @@ class PhysicsEncoder(nn.Module):
     def __init__(
         self, 
         hidden_size = 128, 
+        trainable = True,
         lstm_layers = 3, 
         context_len = 168,
-        trainable = True,
     ):
         super().__init__()
 
-        self.context_len = context_len
+        # self.context_len = context_len
         self.hidden_size = hidden_size
-        self.encoder = nn.LSTM(1, hidden_size, num_layers=lstm_layers, batch_first=True)
+        # self.encoder = nn.LSTM(1, hidden_size, num_layers=lstm_layers, batch_first=True)
 
-        for p in self.model.parameters():
-            p.requires_grad = trainable
+        # for p in self.model.parameters():
+        #     p.requires_grad = trainable
 
     def forward(self, x):
 
-        load_ts = x['load']
-        x = load_ts[:, :self.context_len, :]
+        # load_ts = x['load']
+        # x = load_ts[:, :self.context_len, :]
 
-        h_0 = Variable(torch.zeros(
-            self.num_layers, x.size(0), self.hidden_size))
-        c_0 = Variable(torch.zeros(
-            self.num_layers, x.size(0), self.hidden_size))
+        # h_0 = Variable(torch.zeros(
+        #     self.num_layers, x.size(0), self.hidden_size))
+        # c_0 = Variable(torch.zeros(
+        #     self.num_layers, x.size(0), self.hidden_size))
 
-        _, (h_out, _) = self.lstm(x, (h_0, c_0))
-        h_out = h_out[-1]
+        # _, (h_out, _) = self.lstm(x, (h_0, c_0))
+        # h_out = h_out[-1]
 
-        return h_out
+        # return h_out
+        return torch.randn(x['load'].shape[0], self.hidden_size).to("cuda")
 
 class TextEncoder(nn.Module):
     """
@@ -61,14 +61,15 @@ class TextEncoder(nn.Module):
             p.requires_grad = trainable
 
         self.tokenizer = DistilBertTokenizer.from_pretrained(model_name)
+        self.max_length = max_length
 
         # we are using the CLS token hidden representation as the sentence's embedding
         self.target_token_idx = 0
 
     def forward(self, captions):
-        encoded_captions = self.tokenizer(captions, padding=True, truncation=True, max_length=max_length) 
+        encoded_captions = self.tokenizer(captions, padding=True, truncation=True, max_length=self.max_length) 
         encoded_caption_items = {
-            key: torch.tensor(values[idx])
+            key: torch.tensor(values).to("cuda")
             for key, values in encoded_captions.items()
         }
         output = self.model(input_ids=encoded_caption_items["input_ids"], attention_mask=encoded_caption_items["attention_mask"])
