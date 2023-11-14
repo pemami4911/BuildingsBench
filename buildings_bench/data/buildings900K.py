@@ -39,6 +39,7 @@ class Buildings900K(torch.utils.data.Dataset):
                 weather: List[str] = None,
                 use_buildings_chars : bool = False,
                 use_text_embedding: bool = False,
+                building_description : bool = False,
                 surrogate_mode: bool = False):
         """
         Args:
@@ -53,6 +54,7 @@ class Buildings900K(torch.utils.data.Dataset):
             weather (List[str]): list of weather features to use. Default: None.
             use_buildings_chars (bool): whether include building characteristics.
             use_text_embedding (bool): whether encode building characteristics with text embeddings. Default: False.
+            building_description (bool): whether include text building description. Default: False.
             surrogate_mode (bool): whether enable surrogate mode, which expects index_file to have one building per row. Default: False.
         """
         self.dataset_path = dataset_path / 'Buildings-900K' / 'end-use-load-profiles-for-us-building-stock' / '2021'
@@ -75,6 +77,7 @@ class Buildings900K(torch.utils.data.Dataset):
         self.apply_scaler_transform = apply_scaler_transform
         self.use_buildings_chars = use_buildings_chars
         self.use_text_embedding = use_text_embedding
+        self.building_description = building_description
 
         # calculate total hours, only used for surrogate mode
         if surrogate_mode:
@@ -112,7 +115,6 @@ class Buildings900K(torch.utils.data.Dataset):
             for name in self.meta_dataset_names:
                 df = pd.read_parquet(self.metadata_path / f"{name}.parquet", engine="pyarrow")
                 self.meta_dfs.append(df)
-
 
         if weather: # build a puma-county lookup table
             # lookup_df = pd.read_csv(self.metadata_path / 'puma_county_lookup_weather_only.csv', index_col=0)
@@ -222,6 +224,11 @@ class Buildings900K(torch.utils.data.Dataset):
             sample['building_id']      = int(bldg_id)
             sample['dataset_id']       = int(dataset_id)
             sample["building_subtype"] = bd_subtype
+
+        if self.building_description:
+            with open(self.metadata_path / "simcap" / self.meta_dataset_names[dataset_id] / f"{bldg_id}_cap.txt", "r") as f:
+                caption = f.read()
+                sample['building_description'] = caption
 
         if self.weather is None:
             return sample

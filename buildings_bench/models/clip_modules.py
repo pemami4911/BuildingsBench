@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-import timm
 from transformers import DistilBertModel,  DistilBertTokenizer, BertTokenizer, BertModel
 from buildings_bench.models.transformers import TimeSeriesSinusoidalPeriodicEmbedding
 
@@ -10,34 +9,30 @@ class PhysicsEncoder(nn.Module):
     """
     def __init__(
         self,
-        input_size,
         hidden_size = 128, 
         num_layers = 1, 
         pred_len = 168,
-        continuous_head='mse',
         trainable = True,
     ):
         super().__init__()
-        self.input_size  = input_size
         self.hidden_size = hidden_size
         self.num_layers  = num_layers
         self.pred_len    = pred_len
         self.hidden_size = hidden_size
-        self.continuous_head = continuous_head
 
         self.day_of_year_encoding = TimeSeriesSinusoidalPeriodicEmbedding(32) 
         self.day_of_week_encoding = TimeSeriesSinusoidalPeriodicEmbedding(32)
         self.hour_of_day_encoding = TimeSeriesSinusoidalPeriodicEmbedding(32)
+        self.power_embedding = nn.Linear(1, 64)
+
+        input_size = 103
 
         # bidirectional LSTM to encode exogenous input X
         self.encoder = nn.LSTM(input_size, hidden_size, num_layers=num_layers, batch_first=True, bidirectional=True)
         # uni-directional LSTM to decode simulated measures Z
-        self.decoder = nn.LSTM(hidden_size, hidden_size, num_layers=num_layers, batch_first=True)
+        self.decoder = nn.LSTM(64, hidden_size, num_layers=num_layers, batch_first=True)
 
-        out_dim = 1 if self.continuous_head == 'mse' else 2
-        self.logits = nn.Linear(hidden_size, out_dim)
-
-        for p in self.model.parameters():
+        for p in self.parameters():
             p.requires_grad = trainable
 
     # get physics embedding
@@ -47,7 +42,6 @@ class PhysicsEncoder(nn.Module):
             self.day_of_year_encoding(batch['day_of_year']),
             self.day_of_week_encoding(batch['day_of_week']),
             self.hour_of_day_encoding(batch['hour_of_day']),
-            batch["building_char"],
             batch["temperature"],
             batch["humidity"],
             batch["wind_speed"],
@@ -57,21 +51,25 @@ class PhysicsEncoder(nn.Module):
             batch["diffuse_horizontal_radiation"]
         ], dim=2)
 
-        # simulated measures Z
         z = batch["load"]
+        z = z.roll(1, 1) # shift load by 1
+        z[:, 0, :] = 0   # set initial load to 0
+        z_hidden = self.power_embedding(z)
 
         _, (h_n, c_n) = self.encoder(x)
+
         # take the average of hidden states for both directions (?)
         h_n = torch.cat([
-            h_n[:,  :self.hidden_size].unsqueeze(2),
-            h_n[:,  self.hidden_size:].unsqueeze(2)
-        ], dim=2).mean(dim=2)
+            h_n[:self.num_layers, ...].unsqueeze(0),
+            h_n[self.num_layers:, ...].unsqueeze(0)
+        ], dim=0).mean(dim=0)
         c_n = torch.cat([
-            c_n[:,  :self.hidden_size].unsqueeze(2),
-            c_n[:,  self.hidden_size:].unsqueeze(2)
-        ], dim=2).mean(dim=2)
-        outs, _ = self.decoder(z, (h_n, c_n))
-        return self.logits(outs)
+            c_n[:self.num_layers, ...].unsqueeze(0),
+            c_n[self.num_layers:, ...].unsqueeze(0)
+        ], dim=0).mean(dim=0)
+
+        outs, _ = self.decoder(z_hidden, (h_n, c_n))
+        return outs # average on the time dimension,
 
 class TextEncoder(nn.Module):
     """
@@ -94,19 +92,33 @@ class TextEncoder(nn.Module):
             "bert-base-uncased": [
                 BertModel.from_pretrained("bert-base-uncased"),
                 BertTokenizer.from_pretrained('bert-base-uncased')
-            ]
+            ],
+            # add more models here if needed
         }
         assert model_name in self.models
         self.model, self.tokenizer = self.models[model_name]
 
-
         # we are using the CLS token hidden representation as the sentence's embedding
         self.target_token_idx = 0
+
+        if model_name == "distilbert-base-uncased":
+            for name, param in self.model.named_parameters():
+                if "transformer.layer.5" not in name:
+                    param.requires_grad = False
+                else:
+                    param.requires_grad = True
+                
+        elif model_name == "bert-base-uncased":
+            for name, param in self.model.named_parameters():
+                if "encoder.layer.11" not in name or "pooler" not in name:
+                    param.requires_grad = False
+                else:
+                    param.requires_grad = True
 
     def forward(self, captions):
         encoded_captions = self.tokenizer(captions, padding=True, truncation=True, max_length=self.max_length) 
         encoded_caption_items = {
-            key: torch.tensor(values[idx])
+            key: torch.tensor(values).to("cuda")
             for key, values in encoded_captions.items()
         }
         output = self.model(input_ids=encoded_caption_items["input_ids"], attention_mask=encoded_caption_items["attention_mask"])
