@@ -63,7 +63,8 @@ def load_pretraining(
         context_len: int = 168, # week
         pred_len: int =24,
         use_buildings_chars: bool = False,
-        use_text_embedding: bool = False) -> torch.utils.data.Dataset:
+        use_text_embedding: bool = False,
+        building_description: bool = False) -> torch.utils.data.Dataset:
     r"""
     Pre-training datasets: buildings-900k-train, buildings-900k-val
 
@@ -80,6 +81,7 @@ def load_pretraining(
         pred_len (int): Length of the prediction horizon. Defaults to 24.
         use_buildings_chars (bool): whether include building characteristics
         use_text_embedding (bool): whether encode building characteristics with text embedding
+        building_description (bool): whether include text building description. Default: False.
     Returns:
         torch.utils.data.Dataset: Dataset for pretraining.
     """
@@ -120,6 +122,7 @@ def load_pretraining(
                                weather=weather,
                                use_buildings_chars=use_buildings_chars,
                                use_text_embedding=use_text_embedding,
+                               building_description=building_description,
                                surrogate_mode=True)
     return dataset
         

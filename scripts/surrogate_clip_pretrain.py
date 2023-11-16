@@ -21,91 +21,6 @@ from buildings_bench.data import g_weather_features
 
 SCRIPT_PATH = Path(os.path.realpath(__file__)).parent
 
-@torch.no_grad()
-def validation(model, val_dataloader, args, loss, load_transform, transform, inverse_transform, predict):
-    model.eval()
-    step = 0
-
-    if args.ignore_scoring_rules:
-        metrics_manager = MetricsManager(
-            metrics=metrics_factory('nrmse', types=[ MetricType.SCALAR, MetricType.HOUR_OF_DAY ]) \
-                    + metrics_factory('nmae', types=[ MetricType.SCALAR, MetricType.HOUR_OF_DAY ])) 
-    elif model.module.continuous_loads:
-        metrics_manager = MetricsManager(
-            metrics=metrics_factory('nrmse', types=[ MetricType.SCALAR, MetricType.HOUR_OF_DAY ]) \
-                    + metrics_factory('nmae', types=[ MetricType.SCALAR, MetricType.HOUR_OF_DAY ]),
-            scoring_rule=scoring_rule_factory('crps')
-        ) 
-    else:
-        metrics_manager = MetricsManager(
-            metrics=metrics_factory('nrmse', types=[ MetricType.SCALAR, MetricType.HOUR_OF_DAY ]) \
-                + metrics_factory('nmae', types=[ MetricType.SCALAR, MetricType.HOUR_OF_DAY ]),
-            scoring_rule=scoring_rule_factory('rps')
-        )
-
-    for batch in val_dataloader:   
-        building_types_mask = batch['building_type'][:,0,0] == 1
-
-        for k,v in batch.items():
-           batch[k] = v.to(model.device)
-
-        continuous_targets = batch['load'].clone()
-
-        # Transform if needed
-        batch['load'] = transform(batch['load'])
-        targets = batch['load']
-
-        with torch.cuda.amp.autocast():
-            preds = model(batch)
-            batch_loss = loss(preds, targets)
-            predictions, distribution_params = predict(batch)
-
-        predictions = inverse_transform(predictions)
-
-        if args.apply_scaler_transform != '':
-            continuous_targets = inverse_transform(continuous_targets)
-            # unscale for crps
-            targets = inverse_transform(targets)
-            if args.apply_scaler_transform == 'standard' and distribution_params is not None:
-                mu = inverse_transform(distribution_params[:,:,0])
-                sigma = load_transform.undo_transform_std(distribution_params[:,:,1])
-                distribution_params = torch.cat([mu.unsqueeze(-1), sigma.unsqueeze(-1)],-1)
-            
-            elif args.apply_scaler_transform == 'boxcox' and distribution_params is not None:
-                ######## approximate Gaussian in unscaled space ########
-                mu = inverse_transform(distribution_params[:,:,0])
-                muplussigma = inverse_transform(torch.sum(distribution_params,-1))
-                sigma = muplussigma - mu
-                muminussigma = inverse_transform(distribution_params[:,:,0] - distribution_params[:,:,1])
-                sigma = (sigma + (mu - muminussigma)) / 2
-                distribution_params = torch.cat([mu.unsqueeze(-1), sigma.unsqueeze(-1)],-1)
-        
-        if not model.module.continuous_loads:
-            centroids = load_transform.kmeans.centroids.squeeze() \
-                if args.tokenizer_without_merge else load_transform.merged_centroids
-        else:
-            centroids = None
-        
-        metrics_manager(
-            continuous_targets,
-            predictions,
-            building_types_mask,
-            loss=batch_loss,
-            y_categories=targets,
-            y_distribution_params=distribution_params,
-            centroids=centroids
-        )
-                    
-        step += 1
-        # don't run for too long
-        if step == 500:
-           break
-
-    model.train()
-    summary = metrics_manager.summary(with_loss=True, with_ppl=True)
-
-    return summary['loss'], summary['ppl'], summary
-
 def main(args, model_args):
     """ Main training loop
     
@@ -207,25 +122,11 @@ def main(args, model_args):
                                      context_len=0,
                                      pred_len=model.pred_len,
                                      use_buildings_chars=args.use_buildings_chars,
-                                     use_text_embedding=args.use_text_embedding)
+                                     use_text_embedding=args.use_text_embedding,
+                                     building_description=True)
     
-    val_dataset = load_pretraining("simcap",
-                                   args.num_buildings,
-                                   args.apply_scaler_transform,
-                                   transform_path, 
-                                   weather=args.weather, 
-                                   custom_idx_filename=args.val_idx_filename,
-                                   context_len=0,
-                                   pred_len=model.pred_len,
-                                   use_buildings_chars=args.use_buildings_chars,
-                                   use_text_embedding=args.use_text_embedding)
-
     train_sampler = torch.utils.data.distributed.DistributedSampler(
                                      dataset=train_dataset,
-                                     num_replicas=args.world_size,
-                                     rank=args.rank, shuffle=True)
-    val_sampler = torch.utils.data.distributed.DistributedSampler(
-                                     dataset=val_dataset,
                                      num_replicas=args.world_size,
                                      rank=args.rank, shuffle=True)
 
@@ -233,11 +134,6 @@ def main(args, model_args):
         train_dataset, batch_size=args.batch_size, sampler=train_sampler,
         drop_last=False, worker_init_fn=utils.worker_init_fn_eulp,
         shuffle=(train_sampler is None), num_workers=args.num_workers, pin_memory=True)
-    
-    val_dataloader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=args.batch_size, sampler=val_sampler,
-        drop_last=False, worker_init_fn=utils.worker_init_fn_eulp,
-        shuffle=(val_sampler is None), num_workers=args.num_workers, pin_memory=True)
     
     if not model.continuous_loads:
         load_transform = LoadQuantizer(
@@ -287,18 +183,12 @@ def main(args, model_args):
     else:
         step = 0
         seen_tokens = 0
-        # for p in model.parameters():
-        #     if p.dim() > 1:
-        #         nn.init.normal_(p, mean=0.0, std=args.init_scale)
 
     #################### Training loop ##############################
-    best_val_loss = 1e9
-
     print(f'rank {args.rank} step {step} train_steps = {train_steps}', flush=True)
 
     # fix sampling seed such that each gpu gets different part of dataset        
     train_sampler.set_epoch(0)
-    val_sampler.set_epoch(0)    
     model.train()
     start_time = timer()
 
@@ -308,7 +198,8 @@ def main(args, model_args):
             optimizer.zero_grad()
 
             for k,v in batch.items():
-                batch[k] = v.to(model.device)
+                if torch.is_tensor(v):
+                    batch[k] = v.to(model.device)
             
             # Apply transform to load if needed
             batch['load'] = transform(batch['load'])
@@ -343,45 +234,12 @@ def main(args, model_args):
                     'train/lr': optimizer.param_groups[0]['lr']
                 }, step=step)
 
-            # if args.rank == 0 and step % 10000 == 0:
-            #     print(f'started validation at step {step}...')
-
-            #     val_loss, val_ppl, val_metrics = validation(model, val_dataloader, args, loss, load_transform,
-            #                                                 transform, inverse_transform, predict)
-            #     # only rank 0 needs to save model
-            #     if val_loss < best_val_loss:
-            #         # delete old checkpoint
-            #         if args.note != '':
-            #             for f in checkpoint_dir.glob(f'ckpt-step-*-{args.note}-loss-{best_val_loss:.3f}.pt'):
-            #                 f.unlink()
-            #         else:
-            #             for f in checkpoint_dir.glob(f'ckpt-step-*-loss-{best_val_loss:.3f}.pt'):
-            #                 f.unlink()
-
-            #         best_val_loss = val_loss
-            #         if args.note != '':
-            #             model_name = f'ckpt-step-{step}-{args.note}-loss-{best_val_loss:.3f}.pt'
-            #         else:
-            #             model_name = f'ckpt-step-{step}-loss-{best_val_loss:.3f}.pt'
-            #         utils.save_model_checkpoint(model, optimizer, scheduler, step, checkpoint_dir / model_name)
-            #     for building_type in [BuildingTypes.RESIDENTIAL, BuildingTypes.COMMERCIAL]:
-            #         for metric_name, metric_result in val_metrics[building_type].items():
-            #             if metric_result.type == MetricType.SCALAR:
-            #                 wandb.log({f'val/{building_type}/{metric_name}' : metric_result.value }, step=step)
-            #             else:
-            #                 # Create a wandb.Table for each hour of day metric then plot a line plot
-            #                 table = wandb.Table(columns=['time (hour)', metric_name])
-            #                 multi_hour_value = metric_result.value
-            #                 for row_idx in range(multi_hour_value.shape[0]):
-            #                     table.add_data(row_idx, multi_hour_value[row_idx].item())
-            #                 wandb.log({f'val/{building_type}/{metric_name}' : wandb.plot.line(
-            #                     table, "time (hour)", metric_name, title=f"Time vs {metric_name}")}, step=step)
-                        
-            #     wandb.log({
-            #         'val/loss': val_loss,
-            #         'val/ppl': val_ppl,
-            #     }, step=step)
-            #     print(f'finished validation at step {step}...')
+            if step % 10000 == 0:
+                if args.note != '':
+                    model_name = f'ckpt-step-{step}-{args.note}.pt'
+                else:
+                    model_name = f'ckpt-step-{step}.pt'
+                utils.save_model_checkpoint(model, optimizer, scheduler, step, checkpoint_dir / model_name)
         
             if step >= train_steps:
                 # stop training after this many steps/train_tokens
