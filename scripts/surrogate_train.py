@@ -205,7 +205,8 @@ def main(args, model_args):
                                      context_len=0,
                                      pred_len=model.pred_len,
                                      use_buildings_chars=args.use_buildings_chars,
-                                     use_text_embedding=args.use_text_embedding)
+                                     use_text_embedding=args.use_text_embedding,
+                                     building_description=args.use_building_description)
     
     val_dataset = load_pretraining("simcap",
                                    args.num_buildings,
@@ -216,7 +217,8 @@ def main(args, model_args):
                                    context_len=0,
                                    pred_len=model.pred_len,
                                    use_buildings_chars=args.use_buildings_chars,
-                                   use_text_embedding=args.use_text_embedding)
+                                   use_text_embedding=args.use_text_embedding,
+                                   building_description=args.use_building_description)
 
     train_sampler = torch.utils.data.distributed.DistributedSampler(
                                      dataset=train_dataset,
@@ -306,7 +308,8 @@ def main(args, model_args):
             optimizer.zero_grad()
 
             for k,v in batch.items():
-                batch[k] = v.to(model.device)
+                if torch.is_tensor(v):
+                    batch[k] = v.to(model.device)
             
             # Apply transform to load if needed
             batch['load'] = transform(batch['load'])
@@ -467,6 +470,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_buildings_chars', default=True, help="Whether include building chars for surrogate training, default = True.")
     parser.add_argument('--use_text_embedding', action='store_true', default=False, 
                     help="Whether to use text embeddings of building descriptions. If false, use one-hot encoded features instead. Default is False.")
+    parser.add_argument('--use_building_description', action='store_true', default=False, 
+                    help="Whether to include building descriptions. Default is False.")
 
     experiment_args = parser.parse_args()
 

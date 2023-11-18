@@ -1,0 +1,9 @@
+[model]
+pred_len = 168
+hidden_dim = 256
+lstm_hidden_size = 128
+lstm_num_layers = 1
+text_encoder_name = "distilbert-base-uncased"
+text_max_length = 200
+continuous_head = 'mse'
+continuous_loads = true
