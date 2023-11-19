@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #SBATCH --job-name=simcap_train
-#SBATCH --output=/projects/foundation/zhaonan/logs/ResNet-Text-S.log
-#SBATCH --error=/projects/foundation/zhaonan/logs/ResNet-Text-S.error
+#SBATCH --output=/projects/foundation/zhaonan/logs/transformer.log
+#SBATCH --error=/projects/foundation/zhaonan/logs/transformer.error
 #SBATCH --account=foundation
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
@@ -35,9 +35,13 @@ master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export MASTER_ADDR=$master_addr
 echo "MASTER_ADDR="$MASTER_ADDR
 
+export WANDB_PROJECT=simcap
+export WANDB_ENTITY=nrel-ml-foundations
+
 srun python3 scripts/surrogate_train.py \
         --config ResNet-S \
         --train_idx_filename train_simcap_300k.idx \
         --val_idx_filename val_simcap_300k.idx \
         --use-weather \
-        --ignore_scoring_rules 
+        --ignore_scoring_rules \
+        --note ResNet-S
