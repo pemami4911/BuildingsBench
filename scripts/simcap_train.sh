@@ -11,7 +11,7 @@
 #SBATCH --partition=gpu
 #SBATCH --mem=100gb
 #SBATCH --mail-type=ALL
-#SBATCH --mail-user=zli4@nrel.gov
+#SBATCH --mail-user=ssinha@nrel.gov
 
 
 source /nopt/nrel/apps/210929a/myenv.2110041605
@@ -23,7 +23,7 @@ module load openmpi
 
 
 conda deactivate
-conda activate /projects/foundation/pemami/conda/foundation
+conda activate /projects/foundation/ssinha/conda/simcaps
 
 export BUILDINGS_BENCH=/projects/foundation/eulp/v1.1.0/BuildingsBench
 export WORLD_SIZE=$(($SLURM_NNODES * $SLURM_NTASKS_PER_NODE))
@@ -39,9 +39,9 @@ export WANDB_PROJECT=simcap
 export WANDB_ENTITY=nrel-ml-foundations
 
 srun python3 scripts/surrogate_train.py \
-        --config ResNet-S \
+        --config sequentialsurrogateMLP \
         --train_idx_filename train_simcap_300k.idx \
         --val_idx_filename val_simcap_300k.idx \
         --use-weather \
-        --ignore_scoring_rules \
-        --note ResNet-S
+        --use_building_description \
+        --ignore_scoring_rules 

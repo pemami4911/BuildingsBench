@@ -74,34 +74,3 @@ com_chars = [
 ]
 
 total_chars = res_chars + com_chars
-
-if __name__ == "__main__":
-    import pandas as pd
-    import numpy as np
-    import pickle
-    from sklearn.preprocessing import OneHotEncoder
-    from pathlib import Path
-
-    dataset_path = Path(os.environ.get('BUILDINGS_BENCH', ''))
-
-    types = ["com", "res"]
-    categories = []
-
-    for t in types:
-        df1 = pd.read_parquet(f"{dataset_path}/metadata/{t}stock_amy2018.parquet",
-                            engine="pyarrow")
-        df2 = pd.read_parquet(f"{dataset_path}/metadata/{t}stock_tmy3.parquet",
-                            engine="pyarrow")
-        df = pd.concat([df1, df2])
-
-        chars = {"com": com_chars, "res": res_chars}[t]
-
-        for char in chars:      
-            uniq = df[char].unique()
-            categories.append(uniq)    
-
-        with open(f"{t}_categories.pickle", "ab") as f:
-            pickle.dump(categories, f)
-
-        with open(f"{t}_categories.pickle", "rb") as f:
-            print(pickle.load(f))
