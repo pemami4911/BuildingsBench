@@ -56,10 +56,26 @@ res_chars = [
 ]
 
 # categorical characteristics
+# com_chars = [
+#     "in.building_subtype",
+#     "in.building_type",
+#     "in.rotation",
+#     "in.number_of_stories",
+#     "in.sqft",
+#     "in.hvac_system_type",
+#     "in.weekday_operating_hours",
+#     "in.weekday_opening_time",
+#     "in.weekend_operating_hours",
+#     "in.weekend_opening_time",
+#     "in.heating_fuel",
+#     "in.service_water_heating_fuel",
+#     "stat.average_boiler_efficiency",
+#     "stat.average_gas_coil_efficiency"
+# ]
+
 com_chars = [
-    "in.building_subtype",
+   "in.building_subtype",
     "in.building_type",
-    "in.rotation",
     "in.number_of_stories",
     "in.sqft",
     "in.hvac_system_type",
@@ -67,10 +83,10 @@ com_chars = [
     "in.weekday_opening_time",
     "in.weekend_operating_hours",
     "in.weekend_opening_time",
-    "in.heating_fuel",
-    "in.service_water_heating_fuel",
-    "stat.average_boiler_efficiency",
-    "stat.average_gas_coil_efficiency"
+    "in.tstat_clg_delta_f",
+    "in.tstat_clg_sp_f",
+    "in.tstat_htg_delta_f",
+    "in.tstat_htg_sp_f"
 ]
 
 total_chars = res_chars + com_chars
